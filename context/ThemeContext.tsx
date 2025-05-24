@@ -16,13 +16,8 @@ const ThemeContext = createContext<ThemeContextType>({
 export const useTheme = () => useContext(ThemeContext);
 
 export const ThemeProvider = ({ children }) => {
-  const deviceTheme = useNativeColorScheme();
-  const [theme, setTheme] = useState<ThemeType>(deviceTheme === 'dark' ? 'dark' : 'light');
-  
-  useEffect(() => {
-    // Initialize theme based on device preference
-    setTheme(deviceTheme === 'dark' ? 'dark' : 'light');
-  }, [deviceTheme]);
+  // Always start with light theme as default
+  const [theme, setTheme] = useState<ThemeType>('light');
   
   const toggleTheme = () => {
     setTheme(theme === 'light' ? 'dark' : 'light');

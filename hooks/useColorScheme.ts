@@ -26,10 +26,10 @@ export function useColorScheme(): UseColorSchemeResult {
   useEffect(() => {
     if (theme === 'dark') {
       setColors({
-        background: '#121212',
-        card: '#1E1E1E',
+        background: '#000000',
+        card: '#1A1A1A',
         text: '#FFFFFF',
-        textSecondary: '#B0B0B0',
+        textSecondary: '#A0A0A0',
         border: '#2C2C2C',
       });
     } else {
