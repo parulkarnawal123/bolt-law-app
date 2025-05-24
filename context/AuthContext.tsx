@@ -1,14 +1,9 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { Alert } from 'react-native';
+import { supabase } from '@/lib/supabase';
+import { Database } from '@/types/supabase';
 
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  phone?: string;
-  address?: string;
-  avatar?: string;
-}
+type User = Database['public']['Tables']['users']['Row'];
 
 interface AuthContextType {
   user: User | null;
@@ -17,6 +12,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateProfile: (updates: Partial<User>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -26,6 +22,7 @@ const AuthContext = createContext<AuthContextType>({
   login: async () => {},
   register: async () => {},
   logout: async () => {},
+  updateProfile: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -35,53 +32,61 @@ export const AuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   
   useEffect(() => {
-    // Simulate checking for a stored user session
-    const checkUserSession = async () => {
-      try {
-        // For demo purposes, we'll create a mock user
-        const mockUser: User = {
-          id: '1',
-          name: 'John Doe',
-          email: 'john.doe@example.com',
-          phone: '+91 9876543210',
-          address: '123 Legal Street, New Delhi, India',
-          avatar: 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg'
-        };
-        
-        // Uncomment to simulate a logged-in user
-        // setUser(mockUser);
-        
-        setIsLoading(false);
-      } catch (error) {
-        console.error('Error checking user session:', error);
+    // Check for existing session
+    checkUser();
+    
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (session?.user) {
+          const { data: profile } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+            
+          setUser(profile);
+        } else {
+          setUser(null);
+        }
         setIsLoading(false);
       }
+    );
+
+    return () => {
+      subscription.unsubscribe();
     };
-    
-    checkUserSession();
   }, []);
+  
+  const checkUser = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const { data: profile } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+          
+        setUser(profile);
+      }
+    } catch (error) {
+      console.error('Error checking user session:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
   const login = async (email: string, password: string) => {
     try {
       setIsLoading(true);
       
-      // For demo purposes, accept any credentials
-      // In a real app, you would validate against a backend
-      if (email && password) {
-        const mockUser: User = {
-          id: '1',
-          name: 'John Doe',
-          email: email,
-          phone: '+91 9876543210',
-          address: '123 Legal Street, New Delhi, India',
-          avatar: 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg'
-        };
-        
-        setUser(mockUser);
-        return;
-      }
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
       
-      throw new Error('Invalid credentials');
+      if (error) throw error;
     } catch (error) {
       console.error('Login error:', error);
       throw error;
@@ -94,21 +99,17 @@ export const AuthProvider = ({ children }) => {
     try {
       setIsLoading(true);
       
-      // For demo purposes, accept any registration
-      // In a real app, you would register with a backend
-      if (name && email && password) {
-        const mockUser: User = {
-          id: '1',
-          name: name,
-          email: email,
-          avatar: 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg'
-        };
-        
-        setUser(mockUser);
-        return;
-      }
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name,
+          },
+        },
+      });
       
-      throw new Error('Invalid registration data');
+      if (error) throw error;
     } catch (error) {
       console.error('Registration error:', error);
       throw error;
@@ -120,15 +121,31 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     try {
       setIsLoading(true);
-      
-      // For demo purposes, just clear the user state
-      // In a real app, you would call a logout endpoint
-      setUser(null);
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
     } catch (error) {
       console.error('Logout error:', error);
       throw error;
     } finally {
       setIsLoading(false);
+    }
+  };
+  
+  const updateProfile = async (updates: Partial<User>) => {
+    try {
+      if (!user) throw new Error('No user logged in');
+      
+      const { error } = await supabase
+        .from('users')
+        .update(updates)
+        .eq('id', user.id);
+        
+      if (error) throw error;
+      
+      setUser({ ...user, ...updates });
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      throw error;
     }
   };
   
@@ -139,7 +156,8 @@ export const AuthProvider = ({ children }) => {
       isLoading,
       login,
       register,
-      logout
+      logout,
+      updateProfile
     }}>
       {children}
     </AuthContext.Provider>
